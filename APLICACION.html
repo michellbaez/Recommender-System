@@ -32,6 +32,10 @@
   :focus-visible { outline: 3px solid var(--cielo); outline-offset: 2px; }
   .contenedor { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
   [hidden] { display: none !important; }
+  .con-foto { position: relative; }
+  .con-foto > img.foto { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #fff; opacity: 0; transition: opacity 0.2s; }
+  .con-foto > img.foto.lista { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { .con-foto > img.foto { transition: none; } }
   .solo-lector { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
   /* ---------- Encabezado ---------- */
@@ -465,12 +469,16 @@
 <div class="aviso" id="aviso" role="status" hidden></div>
 <div class="complementos" id="complementos" role="region" aria-label="También suelen llevar" hidden></div>
 
-<!-- FOTOS-INICIO: códigos de productos con fotografía en la carpeta de imágenes.
-     Agreguen aquí cada código entre comillas, por ejemplo "300000712", -->
+<!-- FOTOS-INICIO: OPCIONAL. La app detecta sola las fotos guardadas como imagenes/CODIGO.png (o .jpg).
+     Esta lista puede quedar vacía; los códigos que se pongan aquí se muestran desde el primer momento. -->
 <script>
 window.RUTA_IMAGENES = window.RUTA_IMAGENES || "imagenes/";
 window.FOTOS = [
-  // "300000712",
+  "300000712",
+  "300000714",
+  "300000869",
+  "300004184",
+  "300005439",
 ];
 </script>
 <!-- FOTOS-FIN -->
@@ -626,15 +634,28 @@ window.DATOS = {"meta":{"generado":"2026-11-23 09:30","k":50,"umbral":2,"frecuen
     return `<svg viewBox="0 0 200 200" role="img" aria-label="${esc(p.n)} (${esc(NOMBRES_FORMA[p.fo] || "producto")})" xmlns="http://www.w3.org/2000/svg">
       <rect width="200" height="200" fill="${F}"/>${s}</svg>`;
   }
+  // Fotos automáticas: para cada producto se intenta cargar imagenes/CODIGO.png (y luego .jpg).
+  // Mientras carga, y si no existe, se ve la ilustración de su forma farmacéutica.
+  // window.FOTOS es opcional: los códigos listados se dan por existentes desde el inicio.
+  const EXTENSIONES = [".png", ".jpg", ".jpeg", ".webp"];
+  const estadoFoto = new Map();                     // código -> extensión encontrada | "no"
+  FOTOS.forEach((c) => estadoFoto.set(c, ".png"));
+  const rutaFoto = (c, ext) => (window.RUTA_IMAGENES || "imagenes/") + c + ext;
   function imagen(i, clase = "imagen") {
-    const p = P[i];
-    if (FOTOS.has(p.c)) {
-      return `<div class="${clase}"><img src="${window.RUTA_IMAGENES || "imagenes/"}${p.c}.png" alt="${esc(p.n)}" loading="lazy"
-        style="width:100%;height:100%;object-fit:contain;background:#fff"
-        onerror="this.parentNode.innerHTML=window.__ilustracion(${i})"></div>`;
-    }
-    return `<div class="${clase}">${ilustracion(p)}</div>`;
+    const p = P[i], est = estadoFoto.get(p.c);
+    if (est === "no") return `<div class="${clase}">${ilustracion(p)}</div>`;
+    const ext = est || EXTENSIONES[0];
+    return `<div class="${clase} con-foto">${ilustracion(p)}<img class="foto${est ? " lista" : ""}" src="${rutaFoto(p.c, ext)}"
+      data-c="${p.c}" data-ext="${ext}" alt="${esc(nombreCorto(p.n))}" loading="lazy" decoding="async"
+      onload="window.__fotoOk(this)" onerror="window.__fotoError(this)"></div>`;
   }
+  window.__fotoOk = (img) => { estadoFoto.set(img.dataset.c, img.dataset.ext); img.classList.add("lista"); };
+  window.__fotoError = (img) => {
+    const siguiente = EXTENSIONES[EXTENSIONES.indexOf(img.dataset.ext) + 1];
+    if (siguiente && estadoFoto.get(img.dataset.c) !== "no") { img.dataset.ext = siguiente; img.src = rutaFoto(img.dataset.c, siguiente); return; }
+    estadoFoto.set(img.dataset.c, "no");            // no hay foto: queda la ilustración
+    img.remove();
+  };
   window.__ilustracion = (i) => ilustracion(P[i]);
 
   // =====================================================================
